@@ -115,6 +115,18 @@ func runSelectionTranslationTests(_ check: (Bool, String) -> Void) {
     check(qwenOptions?["source_lang"] == "auto"
           && qwenOptions?["target_lang"] == "Chinese",
           "Qwen MT requests include the required translation language options")
+    let qwenStreamOptions = qwenBody["stream_options"] as? [String: Bool]
+    check(qwenStreamOptions?["include_usage"] == true,
+          "Qwen MT streaming requests ask the provider to include usage")
+    let qwenNonStreamingBody = SelectionTranslationRequestBodyBuilder.body(
+        model: "qwen-mt-flash",
+        messages: qwenMessages,
+        sourceLanguage: .automatic,
+        targetLanguage: .simplifiedChinese,
+        stream: false
+    )
+    check(qwenNonStreamingBody["stream_options"] == nil,
+          "non-streaming Qwen requests omit stream-only options")
 
     let genericMessages = SelectionTranslationMessageBuilder.messages(
         model: "gpt-4o-mini",
@@ -137,6 +149,9 @@ func runSelectionTranslationTests(_ check: (Bool, String) -> Void) {
     )
     check(genericBody["translation_options"] == nil,
           "generic chat models do not receive Qwen translation options")
+    let genericStreamOptions = genericBody["stream_options"] as? [String: Bool]
+    check(genericStreamOptions?["include_usage"] == true,
+          "generic streaming requests ask the provider to include usage")
     let renderedPrompt = try! SelectionTranslationPromptTemplates(
         systemPrompt: "from={{from}} to={{to}}",
         userPrompt: "text={{text}} from={{from}} to={{to}}"
@@ -144,12 +159,28 @@ func runSelectionTranslationTests(_ check: (Bool, String) -> Void) {
     let renderedGenericMessages = SelectionTranslationMessageBuilder.messages(
         model: "gpt-4o-mini",
         source: "Hello source",
-        systemPrompt: renderedPrompt.renderSystemPrompt(sourceLanguage: "English", targetLanguage: "简体中文"),
-        userPrompt: renderedPrompt.renderUserPrompt(source: "Hello source", sourceLanguage: "English", targetLanguage: "简体中文")
+        systemPrompt: renderedPrompt.renderSystemPrompt(
+            sourceLanguage: SelectionTranslationLanguage.english.qwenTranslationName,
+            targetLanguage: SelectionTranslationLanguage.simplifiedChinese.qwenTranslationName),
+        userPrompt: renderedPrompt.renderUserPrompt(
+            source: "Hello source",
+            sourceLanguage: SelectionTranslationLanguage.english.qwenTranslationName,
+            targetLanguage: SelectionTranslationLanguage.simplifiedChinese.qwenTranslationName)
     )
-    check(renderedGenericMessages[0]["content"] == "from=English to=简体中文"
-          && renderedGenericMessages[1]["content"] == "text=Hello source from=English to=简体中文",
-          "generic model prompts replace source, target, and text placeholders")
+    check(renderedGenericMessages[0]["content"] == "from=English to=Chinese"
+          && renderedGenericMessages[1]["content"] == "text=Hello source from=English to=Chinese",
+          "generic model prompts use stable English language names")
+
+    var frontmostWasConsulted = false
+    let exitedTarget = CommandBarSelectionReader.resolveTargetApplication(
+        processIdentifier: 999_999,
+        lookup: { _ in nil },
+        frontmost: {
+            frontmostWasConsulted = true
+            return NSRunningApplication.current
+        })
+    check(exitedTarget == nil && !frontmostWasConsulted,
+          "an exited explicit target does not fall back to the current frontmost app")
 
     let estimated = SelectionTranslationTokenEstimator.estimate(
         inputText: "你好",

@@ -26,18 +26,27 @@ trap cleanup EXIT
 # into the build sweeps like any other ending.
 trap 'exit 1' INT TERM HUP
 
-# Flags: --dev builds the local-only "Vorssaint (Developer)" variant (its own
-# bundle id, so it coexists with the official app); --install puts it in /Applications.
+# Flags: --dev builds the local-only "Vorssaint (Developer)" debug variant;
+# --personal builds the optimized local-only daily-use variant. Both use the
+# independent .dev identity, so neither can replace the official app.
 DEV=0
+PERSONAL=0
 INSTALL=0
 TEST=0
 for arg in "$@"; do
     case "$arg" in
         --dev)     DEV=1 ;;
+        --personal) PERSONAL=1 ;;
         --install) INSTALL=1 ;;
         --test)    TEST=1 ;;
     esac
 done
+
+if (( DEV && PERSONAL )); then
+    echo "✗ choose either --dev or --personal, not both" >&2
+    exit 2
+fi
+LOCAL_BUILD=$(( DEV || PERSONAL ))
 
 if (( DEV )); then
     APP_NAME="Vorssaint (Developer)"
@@ -46,6 +55,13 @@ if (( DEV )); then
     BUILD_VARIANT_FLAGS=(-D VORSSAINT_DEVELOPMENT)
     APP_OPTIMIZATION_FLAGS=(-Onone)
     BUILD_CONFIGURATION="debug"
+elif (( PERSONAL )); then
+    APP_NAME="Vorssaint Personal"
+    EXECUTABLE="VorssaintPersonal"
+    APP_BUNDLE_ID="com.vorssaint.utils.dev"
+    BUILD_VARIANT_FLAGS=(-D VORSSAINT_DEVELOPMENT)
+    APP_OPTIMIZATION_FLAGS=(-O)
+    BUILD_CONFIGURATION="release"
 else
     APP_NAME="Vorssaint"
     EXECUTABLE="Vorssaint"
@@ -72,7 +88,7 @@ developer_id_identity() {
 # keeps showing them as granted, and no new prompt ever appears. When no
 # identity is installed, create the stable local one up front instead of
 # falling through to ad-hoc — setup-signing.sh is free, offline and idempotent.
-if (( DEV )) && [[ -z "$(developer_id_identity)" ]] \
+if (( LOCAL_BUILD )) && [[ -z "$(developer_id_identity)" ]] \
     && ! security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
     echo "▸ No signing identity installed; creating the stable local one…"
     if ! ./Tools/setup-signing.sh; then
@@ -377,6 +393,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/SelectionTranslation/SelectionTranslationSettingsStore.swift \
         Sources/Vorssaint/Core/SelectionTranslationStrings.swift \
         Sources/Vorssaint/Services/SelectionTranslation/SelectionTranslationPasteboardSupport.swift \
+        Sources/Vorssaint/Services/CommandBar/CommandBarSelection.swift \
         Sources/Vorssaint/Services/TransientPaste.swift \
         Tests/SelectionTranslationTests.swift \
         Tests/MetricsTests.swift \
@@ -465,25 +482,24 @@ cp CHANGELOG.md "$STAGE/Contents/Resources/CHANGELOG.md"
 for lproj in Resources/*.lproj(N); do
     cp -R "$lproj" "$STAGE/Contents/Resources/"
 done
-if (( DEV )); then
+if (( LOCAL_BUILD )); then
     # A distinct identity so the Developer build installs and runs next to the
     # official app, with its own permissions, preferences and login item.
-    /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.vorssaint.utils.dev" "$STAGE/Contents/Info.plist"
-    /usr/libexec/PlistBuddy -c "Set :CFBundleName Vorssaint (Developer)" "$STAGE/Contents/Info.plist"
-    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Vorssaint (Developer)" "$STAGE/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $APP_BUNDLE_ID" "$STAGE/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$STAGE/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$STAGE/Contents/Info.plist"
     /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $EXECUTABLE" "$STAGE/Contents/Info.plist"
     FAN_PLIST="$STAGE/Contents/Library/LaunchDaemons/$FAN_HELPER_ID.plist"
     /usr/libexec/PlistBuddy -c "Set :Label $FAN_HELPER_ID" "$FAN_PLIST"
     /usr/libexec/PlistBuddy -c "Set :BundleProgram Contents/Library/LaunchServices/$FAN_HELPER_ID" "$FAN_PLIST"
     /usr/libexec/PlistBuddy -c "Delete :MachServices:com.vorssaint.utils.fan-control" "$FAN_PLIST"
     /usr/libexec/PlistBuddy -c "Add :MachServices:$FAN_HELPER_ID bool true" "$FAN_PLIST"
-    # Stamp the source commit + build time so the running dev app shows (in About)
-    # exactly which code it was compiled from. Lets you verify it matches HEAD before
-    # testing, instead of unknowingly running a stale build. Dev-only; never shipped.
+    # Stamp the source commit + build time so a local app shows (in About)
+    # exactly which code it was compiled from. Local-only; never shipped.
     SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
     [[ -n "$(git status --porcelain 2>/dev/null)" ]] && SHA="$SHA-dirty"
     /usr/libexec/PlistBuddy -c "Add :VorssaintBuildCommit string '$SHA · $(date '+%Y-%m-%d %H:%M')'" "$STAGE/Contents/Info.plist"
-    echo "  stamped dev build: $SHA"
+    echo "  stamped local build: $SHA"
 fi
 FAN_HELPER_VERSION="$(
     export LC_ALL=C

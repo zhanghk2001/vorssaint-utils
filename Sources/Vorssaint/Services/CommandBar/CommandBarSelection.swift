@@ -22,9 +22,13 @@ enum CommandBarSelectionReader {
     /// when the front app is us (the field's own text is not a selection).
     static func readSelectedText(processIdentifier: pid_t? = nil) -> String {
         guard AXIsProcessTrusted() else { return "" }
-        let front = processIdentifier.flatMap { NSRunningApplication(processIdentifier: $0) }
-            ?? NSWorkspace.shared.frontmostApplication
-        guard let front, front.bundleIdentifier != Bundle.main.bundleIdentifier else { return "" }
+        let front = resolveTargetApplication(
+            processIdentifier: processIdentifier,
+            lookup: { NSRunningApplication(processIdentifier: $0) },
+            frontmost: { NSWorkspace.shared.frontmostApplication }
+        )
+        guard let front, !front.isTerminated,
+              front.bundleIdentifier != Bundle.main.bundleIdentifier else { return "" }
         // Asked of the app in front, not of the system-wide element: a timeout
         // set on the system-wide element is the DEFAULT FOR THE WHOLE PROCESS,
         // and every other Accessibility call in the app would inherit this
@@ -38,6 +42,20 @@ enum CommandBarSelectionReader {
               let text = copyString(focused, kAXSelectedTextAttribute) else { return "" }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.count <= maximumLength ? trimmed : ""
+    }
+
+    /// Resolves the application captured when a shortcut began. An explicit
+    /// process identifier is authoritative: if that app exits, returning nil
+    /// is safer than accidentally reading whichever app is frontmost now.
+    static func resolveTargetApplication(
+        processIdentifier: pid_t?,
+        lookup: (pid_t) -> NSRunningApplication?,
+        frontmost: () -> NSRunningApplication?
+    ) -> NSRunningApplication? {
+        if let processIdentifier {
+            return lookup(processIdentifier)
+        }
+        return frontmost()
     }
 
     // MARK: - Accessibility reading

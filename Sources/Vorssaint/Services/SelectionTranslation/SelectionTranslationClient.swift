@@ -81,8 +81,8 @@ final class SelectionTranslationClient {
         result.httpMethod = "POST"
         result.setValue("Bearer \(request.provider.apiKey)", forHTTPHeaderField: "Authorization")
         result.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let from = request.languages.source.displayName
-        let to = request.languages.target.displayName
+        let from = request.languages.source.qwenTranslationName
+        let to = request.languages.target.qwenTranslationName
         let messages = SelectionTranslationMessageBuilder.messages(
             model: request.provider.model,
             source: request.source,

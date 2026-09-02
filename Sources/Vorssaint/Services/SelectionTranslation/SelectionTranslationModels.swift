@@ -293,6 +293,9 @@ enum SelectionTranslationRequestBodyBuilder {
             "messages": messages,
             "stream": stream
         ]
+        if stream {
+            body["stream_options"] = ["include_usage": true]
+        }
         if SelectionTranslationModelRouting.isQwenMachineTranslationModel(model) {
             body["translation_options"] = [
                 "source_lang": sourceLanguage.qwenTranslationName,
