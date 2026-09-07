@@ -9,6 +9,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP_NAME="Vorssaint"
+PERSONAL=0
+for arg in "$@"; do
+    case "$arg" in
+        --personal) PERSONAL=1 ;;
+    esac
+done
+if (( PERSONAL )); then
+    APP_NAME="Vorssaint Personal"
+fi
 APP="build/stage/$APP_NAME.app"
 VOLUME="$APP_NAME"
 STAGING=""
@@ -34,7 +43,11 @@ xattr -cr "$APP"
 codesign --verify --deep --strict "$APP"
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")"
-OUT="dist/Vorssaint-$VERSION.dmg"
+if (( PERSONAL )); then
+    OUT="dist/Vorssaint-Personal-$VERSION.dmg"
+else
+    OUT="dist/Vorssaint-$VERSION.dmg"
+fi
 
 echo "▸ Rendering installer background…"
 swift Tools/MakeDMGBackground.swift build/dmg-background.png
