@@ -209,8 +209,7 @@ func runSelectionTranslationTests(_ check: (Bool, String) -> Void) {
                                                                 copyChangeCount: 41,
                                                                 currentChangeCount: 42),
           "selection fallback leaves a newer user copy untouched")
-    check(SelectionTranslationConstants.quickToolHotkeyID == 21,
-          "selection translation uses the reserved quick-tool hotkey id")
+    runSelectionTranslationHotkeyIDTests(check)
 
     var shortcutFlow = SelectionTranslationShortcutFlowState()
     check(shortcutFlow.deadlineReachedNow() == .none,
@@ -411,4 +410,32 @@ func runSelectionTranslationTests(_ check: (Bool, String) -> Void) {
           && watchdogThenReader.claimDeferralEnd()
           && !watchdogThenReader.claimResume(),
           "watchdog resumes once while the late reader still releases deferral")
+}
+
+/// Scan the actual tool declarations so an upstream addition cannot silently
+/// reuse the personal feature's id while both features' tests still pass.
+func runSelectionTranslationHotkeyIDTests(_ check: (Bool, String) -> Void) {
+    let root = URL(fileURLWithPath: "Sources/Vorssaint", isDirectory: true)
+    guard let files = FileManager.default.enumerator(at: root,
+                                                    includingPropertiesForKeys: nil) else {
+        check(false, "quick-tool id check can enumerate application sources")
+        return
+    }
+    do {
+        let declaration = try NSRegularExpression(pattern: #"QuickToolHotkey\(id:\s*([0-9_]+)\s*\)"#)
+        var declaredIDs: Set<UInt32> = []
+        for case let file as URL in files where file.pathExtension == "swift" {
+            let source = try String(contentsOf: file, encoding: .utf8)
+            for match in declaration.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+                guard let range = Range(match.range(at: 1), in: source),
+                      let id = UInt32(source[range].replacingOccurrences(of: "_", with: "")) else { continue }
+                declaredIDs.insert(id)
+            }
+        }
+        check(!declaredIDs.isEmpty
+              && !declaredIDs.contains(SelectionTranslationConstants.quickToolHotkeyID),
+              "selection translation does not reuse another tool's literal hotkey id")
+    } catch {
+        check(false, "quick-tool id check reads application sources: \(error)")
+    }
 }

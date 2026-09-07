@@ -108,5 +108,8 @@ struct SelectionTranslationShortcutFlowState: Sendable {
 }
 
 enum SelectionTranslationConstants {
-    static let quickToolHotkeyID: UInt32 = 21
+    // Keep this outside the hand-assigned quick-tool ids used by the
+    // official capture/history services. QuickToolHotkey routes events by
+    // this process-wide id, so sharing one silently steals the callback.
+    static let quickToolHotkeyID: UInt32 = 60
 }
