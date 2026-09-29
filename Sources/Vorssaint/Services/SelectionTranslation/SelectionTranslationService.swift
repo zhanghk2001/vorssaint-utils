@@ -57,7 +57,8 @@ final class SelectionTranslationService: ObservableObject {
             && UserDefaults.standard.bool(forKey: DefaultsKey.selectionTranslationShortcutEnabled)
         let shortcut = GlobalShortcut.saved(for: DefaultsKey.selectionTranslationShortcut,
                                             fallback: .selectionTranslationDefault)
-        let registered = hotkey.sync(enabled: enabled, shortcut: shortcut)
+        let registered = hotkey.sync(enabled: enabled, shortcut: shortcut,
+                                      storageKey: DefaultsKey.selectionTranslationShortcut)
         shortcutStatus = enabled ? (registered ? .registered : .conflict) : .disabled
         if !enabled { dismiss() }
     }
