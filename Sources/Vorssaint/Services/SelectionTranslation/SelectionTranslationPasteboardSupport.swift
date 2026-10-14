@@ -111,5 +111,7 @@ enum SelectionTranslationConstants {
     // Keep this outside the hand-assigned quick-tool ids used by the
     // official capture/history services. QuickToolHotkey routes events by
     // this process-wide id, so sharing one silently steals the callback.
-    static let quickToolHotkeyID: UInt32 = 61
+    // Keep this distinct from the 3.4.1 screenshot-upload shortcut (61) and
+    // the pointer-display shortcut (80).
+    static let quickToolHotkeyID: UInt32 = 81
 }
